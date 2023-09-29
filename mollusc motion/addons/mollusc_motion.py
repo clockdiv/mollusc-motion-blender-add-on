@@ -40,15 +40,22 @@ class AnimationCurveModeHandler():
             return False
 
     @staticmethod
-    def get_animation_data(mollusc_connections_list, mollusc_object):
+    def get_animation_data(mollusc_connections_list, mollusc_object, global_record_enabled):
         """Creates a list from the custom properties of the ControllerObject.
         The list is send to the motorcontrollerboard in this order in send_animation_data()"""
         animation_data = []
         try:
-            for p in mollusc_connections_list:
-                # print(p.linked_property, end='\t')
-                # print(mollusc_object[p.linked_property])
-                animation_data.append(mollusc_object[p.linked_property])
+            for mollusc_connection in mollusc_connections_list:
+                # if Live-Input enabled, get data from .sensor_value, else from .linked_property
+                if mollusc_connection.enable_live == True:
+                    animation_data.append(mollusc_connection.sensor_value)
+                    # record to mollusc_object if enable_rec is check
+                    if mollusc_connection.enable_rec == True and global_record_enabled == True:
+                        custom_property = mollusc_connection.linked_property
+                        mollusc_object[custom_property] = mollusc_connection.sensor_value
+                        mollusc_object.keyframe_insert(data_path = '["'+custom_property+'"]')
+                else:
+                    animation_data.append(mollusc_object[mollusc_connection.linked_property])
 
         except KeyError:
             print('could not read the custom property data I was looking for')
@@ -68,7 +75,9 @@ class AnimationCurveModeHandler():
         if AnimationCurveModeHandler.frame_was_already_sent(): 
             return
         try:
-            animation_data = AnimationCurveModeHandler.get_animation_data(scene.mollusc_connections_list, scene.mollusc_object)
+            animation_data = AnimationCurveModeHandler.get_animation_data(scene.mollusc_connections_list, 
+                                                                          scene.mollusc_object, 
+                                                                          scene.record_during_playback)
         except TypeError:
             # print('No Object in \'Tiny Puppeteer Object\'')
             pass
@@ -193,7 +202,14 @@ class SerialPortHandler(bpy.types.PropertyGroup):
         )
 
 
-
+def update_callback(self, context):
+    try:
+        for region in context.area.regions:
+            if region.type == "UI":
+                region.tag_redraw()
+    except:
+        pass
+    return None
 
 #                   Properties for Connection List
 
@@ -207,6 +223,14 @@ class MolluscConnection(bpy.types.PropertyGroup):
             p = (prop, prop, '') # identifier, name, description (here, identifier = name)
             custom_properties_list.append(p)
         return custom_properties_list
+    
+    def live_toggled(self, context):
+        if self.enable_live == False:
+            self.enable_rec = False
+
+    def record_toggled(self, context):
+        if self.enable_rec == True:
+            self.enable_live = True
 
     spaghettimonster_id : bpy.props.EnumProperty(
         name = 'Spaghettimonster ID',
@@ -235,7 +259,8 @@ class MolluscConnection(bpy.types.PropertyGroup):
     sensor_value : bpy.props.FloatProperty(
         name = 'Sensor Value',
         description = 'Value of the sensor',
-        default = 0
+        default = 0,
+        update = update_callback
     )
     sensor_map_min : bpy.props.IntProperty(
         name = 'Map Min',
@@ -250,12 +275,14 @@ class MolluscConnection(bpy.types.PropertyGroup):
     enable_live : bpy.props.BoolProperty(
         name = 'Enable Live Input',
         description = 'Enable input from Spaghettimonster for this channel',
-        default = False
+        default = False,
+        update = live_toggled
     )
     enable_rec : bpy.props.BoolProperty(
         name = 'Record Live Input',
         description = 'Record input from Spaghettimonster to this channel',
-        default = False
+        default = False,
+        update = record_toggled
     )
     linked_property : bpy.props.EnumProperty(
            name = 'Linked Property',
@@ -291,7 +318,7 @@ class LIST_UL_MolluscConnections(bpy.types.UIList):
             layout.prop(item, 'linked_property', text='')
 
             # Value of the linked property
-            if item.linked_property is not '':
+            if item.linked_property != '':
                 layout.label(text = str(custom_object[item.linked_property]))
             else:
                 layout.label(text = '-')
@@ -325,6 +352,7 @@ class HARDWARE_OT_connect_spaghettimonster(bpy.types.Operator):
         return len(SerialPortHandler.serial_port_enum) and not spaghettimonster_hw.serial_device.is_open
     def execute(self, context):
         spaghettimonster_hw.connectSerial(context.scene.serial_port_spaghettimonster.get_selected_serialname())
+        spaghettimonster_hw.set_mollusc_motion_connection_list(context.scene.mollusc_connections_list)
         return {'FINISHED'}
 
 class HARDWARE_OT_connect_mollusccontroller(bpy.types.Operator):
@@ -347,6 +375,7 @@ class HARDWARE_OT_disconnect_spaghettimonster(bpy.types.Operator):
         return spaghettimonster_hw.serial_device.is_open
     def execute(self, context):
         spaghettimonster_hw.disconnectSerial()
+        spaghettimonster_hw.set_mollusc_motion_connection_list(None)
         return {'FINISHED'}
 
 class HARDWARE_OT_disconnect_mollusccontroller(bpy.types.Operator):
@@ -510,7 +539,9 @@ class HARDWARE_PT_molluscmotion_setup(bpy.types.Panel):
         output_device_row.operator(HARDWARE_OT_connect_mollusccontroller.bl_idname)
         output_device_row.operator(HARDWARE_OT_disconnect_mollusccontroller.bl_idname)
 
-        # col.separator()
+        col.separator()
+        col.prop(context.scene, 'record_during_playback', text='Record during Playback (to the connections where \'rec\' is enabled)',
+                  icon='SHADING_SOLID')
         # col.label(text='Select Mode:')
         # op_mode_row=col.row()
         # op_mode_row.prop(context.scene.operation_mode, 'operation_mode', expand=True,text='')
@@ -597,12 +628,12 @@ def register():
     bpy.types.Scene.mollusc_connections_list = bpy.props.CollectionProperty(type = MolluscConnection) 
     bpy.types.Scene.mollusc_connections_list_index = bpy.props.IntProperty(name = 'Spaghettimonster ID', default = 0)
     bpy.types.Scene.new_prop_name = bpy.props.StringProperty(name = 'New Properties Name', default = 'prop')
+    bpy.types.Scene.record_during_playback = bpy.props.BoolProperty(name = 'Record During Playback', default = False)
 
     bpy.app.handlers.frame_change_post.append(AnimationCurveModeHandler.frame_change_handler)
     bpy.app.handlers.depsgraph_update_post.append(AnimationCurveModeHandler.graph_editor_update_handler)
     bpy.app.handlers.animation_playback_pre.append(AnimationCurveModeHandler.animation_started_handler)
     bpy.app.handlers.animation_playback_post.append(AnimationCurveModeHandler.animation_ended_handler)
-
 
 
 def unregister():
@@ -618,6 +649,7 @@ def unregister():
     del bpy.types.Scene.mollusc_connections_list
     del bpy.types.Scene.mollusc_connections_list_index
     del bpy.types.Scene.new_prop_name
+    del bpy.types.Scene.record_during_playback
 
     spaghettimonster_hw.disconnectSerial()
     mollusccontroller_hw.disconnectSerial()

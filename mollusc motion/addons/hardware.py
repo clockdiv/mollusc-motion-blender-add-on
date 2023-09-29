@@ -92,10 +92,15 @@ class SpaghettimonsterDataError(Exception):
 
 class Spaghettimonster(SerialWrapper):
     monsterdriver_hw = None
+    mollusc_motion_connection_list = None
 
     def set_monsterdriver_hw(self, hw):
         print('set monsterdriver hardware')
         self.monsterdriver_hw = hw
+
+    def set_mollusc_motion_connection_list(self, object):
+        print('set mollusc motion list object')
+        self.mollusc_motion_connection_list = object
 
     def spaghettimonster_to_armature(self, data):
         rotation_upper_arm = math.radians(data[3] * 360.0)
@@ -114,18 +119,31 @@ class Spaghettimonster(SerialWrapper):
             pass
 
     def decode_spaghettimonster(self, spaghettimonster_data):
-        # sm_data = spaghettimonster_data.strip().split(',')
-        print(spaghettimonster_data)
-    
-        sm_data = json.loads(spaghettimonster_data)
-        for key in sm_data:
-            print(key + " - " + sm_data[key])
-
+        # print('--------------------------')
+        sm_data_json = json.loads(spaghettimonster_data)
+        # print(sm_data_json)
+        for key in sm_data_json:     
+            # print(key)
+            for mollusc_motion_connection in self.mollusc_motion_connection_list:
+                if mollusc_motion_connection.spaghettimonster_id == key:
+                    requested_index = int(mollusc_motion_connection.sensor_index)
+                    # print('spaghettimonster id:', end='')
+                    # print(mollusc_motion_connection.spaghettimonster_id)
+                    # print('data for that id:', end='')
+                    # print(sm_data_json[key])
+                    # print('requested_index:', end='')
+                    # print(requested_index)
+                    # print('value at requested index:', end='')
+                    value = sm_data_json[key][requested_index]
+                    # print(value)
+                    mollusc_motion_connection.sensor_value = value
+                        
         return
+    
         # animation_data = [0] * 14
 
-        if len(sm_data) == 18:  # that's the data length coming from 3 Spaghettimonsters (6 x 3)
-            sm_data_floats = [float(i) for i in sm_data]
+        if len(sm_data_json) == 18:  # that's the data length coming from 3 Spaghettimonsters (6 x 3)
+            sm_data_floats = [float(i) for i in sm_data_json]
 
             animation_data = mapping.map_animation_data_2(sm_data_floats)
 
