@@ -28,6 +28,8 @@ custom_icons = None
 spaghettimonster_hw = hardware.Spaghettimonster(name = 'Spaghettimonster')
 mollusccontroller_hw = hardware.MotorControllerBoard(name = 'MolluscController')
 
+
+
 class AnimationCurveModeHandler():
     last_frame_sent = 0
 
