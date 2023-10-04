@@ -16,7 +16,8 @@ bl_info = {
 import bpy
 from bpy.utils import previews
 import os
-import hardware
+from molluscmotion import hardware
+from molluscmotion.mapping import map_range
 import serial
 import serial.tools.list_ports
 
@@ -48,14 +49,18 @@ class AnimationCurveModeHandler():
             for mollusc_connection in mollusc_connections_list:
                 # if Live-Input enabled, get data from .sensor_value, else from .linked_property
                 if mollusc_connection.enable_live == True:
-                    animation_data.append(mollusc_connection.sensor_value)
+                    connection_data = int(map_range(mollusc_connection.sensor_value, 0.0, 1.0, mollusc_connection.sensor_map_min, mollusc_connection.sensor_map_max))
                     # record to mollusc_object if enable_rec is check
                     if mollusc_connection.enable_rec == True and global_record_enabled == True:
                         custom_property = mollusc_connection.linked_property
                         mollusc_object[custom_property] = mollusc_connection.sensor_value
                         mollusc_object.keyframe_insert(data_path = '["'+custom_property+'"]')
                 else:
-                    animation_data.append(mollusc_object[mollusc_connection.linked_property])
+                    # mapped_data = int(map_range())
+                    # animation_data.append(mollusc_object[mollusc_connection.linked_property])
+                    connection_data = int(map_range(mollusc_object[mollusc_connection.linked_property], 0.0, 1.0, mollusc_connection.sensor_map_min, mollusc_connection.sensor_map_max))
+
+                animation_data.append(connection_data)
 
         except KeyError:
             print('could not read the custom property data I was looking for')
@@ -71,6 +76,7 @@ class AnimationCurveModeHandler():
         # spaghettimonster_hw.send(animation_data_csv_string)
         mollusccontroller_hw.send(animation_data_csv_string)
 
+    @staticmethod
     def frame_change_handler(scene):
         if AnimationCurveModeHandler.frame_was_already_sent(): 
             return
@@ -84,6 +90,7 @@ class AnimationCurveModeHandler():
         else:
             AnimationCurveModeHandler.send_animation_data(animation_data)
 
+    @staticmethod
     def graph_editor_update_handler(scene):
         areatype = None
         try: 
@@ -272,6 +279,11 @@ class MolluscConnection(bpy.types.PropertyGroup):
         description = 'Map 1.0 of the sensor to this value',
         default = 1024
     )
+    enable_invert : bpy.props.BoolProperty(
+        name = 'Invert Live Input',
+        description = 'Invert the sensor value for this channel',
+        default = False
+    )
     enable_live : bpy.props.BoolProperty(
         name = 'Enable Live Input',
         description = 'Enable input from Spaghettimonster for this channel',
@@ -309,8 +321,9 @@ class LIST_UL_MolluscConnections(bpy.types.UIList):
             group.prop(item, 'sensor_map_min', text='')
             group.prop(item, 'sensor_map_max', text='')
 
-            # Enable Realtime-Mode and Recording
+            # Enable Invert, Realtime-Mode and Recording
             group = layout.row(align=True)
+            group.prop(item, 'enable_invert', text='', emboss=True, icon='MOD_LENGTH')
             group.prop(item, 'enable_live', text='', emboss=True, icon='ARMATURE_DATA')
             group.prop(item, 'enable_rec', text='', emboss=True, icon='SHADING_SOLID')
 
@@ -407,20 +420,28 @@ class LIST_OT_MolluscAddConnection(bpy.types.Operator):
         return True
     
     def execute(self, context):
-        tiny_puppeteer_object = context.scene.mollusc_object
         
+        tiny_puppeteer_object = context.scene.mollusc_object
+        if tiny_puppeteer_object == None:
+            print('creating mollusc motion object...')
+            bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+            tiny_puppeteer_object = context.active_object
+            tiny_puppeteer_object.name = 'mollusc motion'
+            context.scene.mollusc_object = tiny_puppeteer_object
+            
+
         # name and create the custom property from user input:
         new_custom_prop = context.scene.new_prop_name
         i = 1
         while new_custom_prop in tiny_puppeteer_object.keys():
             new_custom_prop = context.scene.new_prop_name + str(i)
             i += 1
-        tiny_puppeteer_object[new_custom_prop] = 0
+        tiny_puppeteer_object[new_custom_prop] = 0.0
 
         # setup the new custom prop on the mollusc object (change min/max values)
         tiny_puppeteer_object.id_properties_ensure() # make sure manager is updated
         properties_manager = tiny_puppeteer_object.id_properties_ui(new_custom_prop)
-        properties_manager.update(min=0, max=65535)
+        properties_manager.update(min=0.0, max=1.0)
 
         new_item = context.scene.mollusc_connections_list.add()
         # todo: link the custom prop to new_item, this has to be done manually now
@@ -634,6 +655,7 @@ def register():
     bpy.app.handlers.depsgraph_update_post.append(AnimationCurveModeHandler.graph_editor_update_handler)
     bpy.app.handlers.animation_playback_pre.append(AnimationCurveModeHandler.animation_started_handler)
     bpy.app.handlers.animation_playback_post.append(AnimationCurveModeHandler.animation_ended_handler)
+    
 
 
 def unregister():

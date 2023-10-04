@@ -7,7 +7,7 @@ from mathutils import Euler
 import math
 import subprocess
 import sys
-import mapping
+from molluscmotion import mapping
 import json
 
 try:
@@ -18,7 +18,6 @@ except ModuleNotFoundError:
     import serial
     import serial.tools.list_ports
     print('pyserial installed and imported')
-    
 
 
 class SerialWrapper:
@@ -69,13 +68,14 @@ class SerialWrapper:
         print('   ' + data.decode('utf-8'), end = '')
 
     def send(self, data):
-        print('attempting to send ' + data + ' to ' + self.name + '...', end='')
+        # print('attempting to send ' + data + ' to ' + self.name + '...', end='')
         if self.serial_device.is_open:
-            print('success.')
+            # print('success.')
             data += '\n'
-            # self.serial_device.write(data.encode('utf-8'))
+            self.serial_device.write(data.encode('utf-8'))
         else:
-            print('device not open.')
+            # print('device not open.')
+            pass
     
     def receiver_thread(self, args):
         print('Started thread for ' + self.name)
@@ -119,14 +119,13 @@ class Spaghettimonster(SerialWrapper):
             pass
 
     def decode_spaghettimonster(self, spaghettimonster_data):
-        # print('--------------------------')
         sm_data_json = json.loads(spaghettimonster_data)
-        # print(sm_data_json)
-        for key in sm_data_json:     
+        # print(sm_data_json)       # the decoded json data
+        for key in sm_data_json:    # iterate through every spaghettimonster-id
             # print(key)
-            for mollusc_motion_connection in self.mollusc_motion_connection_list:
-                if mollusc_motion_connection.spaghettimonster_id == key:
-                    requested_index = int(mollusc_motion_connection.sensor_index)
+            for mollusc_motion_connection in self.mollusc_motion_connection_list:  # find the spaghettimonster-id in the list of.. 
+                if mollusc_motion_connection.spaghettimonster_id == key:           # ..connections from the mollusc motion list;
+                    requested_index = int(mollusc_motion_connection.sensor_index)  # see which index the connection is looking for...
                     # print('spaghettimonster id:', end='')
                     # print(mollusc_motion_connection.spaghettimonster_id)
                     # print('data for that id:', end='')
@@ -134,9 +133,12 @@ class Spaghettimonster(SerialWrapper):
                     # print('requested_index:', end='')
                     # print(requested_index)
                     # print('value at requested index:', end='')
-                    value = sm_data_json[key][requested_index]
-                    # print(value)
-                    mollusc_motion_connection.sensor_value = value
+                    if mollusc_motion_connection.enable_invert == True:
+                        mollusc_motion_connection.sensor_value = 1.0 - sm_data_json[key][requested_index] # ...and get the relevant sensor value from the array...
+                    else:
+                        mollusc_motion_connection.sensor_value = sm_data_json[key][requested_index] # ...and get the relevant sensor value from the array...
+
+
                         
         return
     

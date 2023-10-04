@@ -3,9 +3,7 @@ import bpy
 def map_range(x, in_min, in_max, out_min, out_max):
   return (x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min
 
-# def valmap(x, in_min, in_max, out_min, out_max):
-#   return ((x - in_min) / (in_max - in_min)) * (out_max - out_min)  + out_min
-
+'''
 def map_animation_data(sm_data_floats):
     animation_data = [0] * 14
     servo_range = 512
@@ -48,3 +46,4 @@ def map_animation_data_2(sm_data_floats):
     # for n in range(4,14):
     #     animation_data[n] = 2048
     return animation_data
+'''
