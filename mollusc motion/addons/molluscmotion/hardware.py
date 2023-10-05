@@ -7,8 +7,10 @@ from mathutils import Euler
 import math
 import subprocess
 import sys
-from molluscmotion import mapping
 import json
+from molluscmotion import mapping
+from molluscmotion import animation_handler
+# import animation_handler
 
 try:
     import serial
@@ -92,6 +94,7 @@ class SpaghettimonsterDataError(Exception):
 
 class Spaghettimonster(SerialWrapper):
     monsterdriver_hw = None
+    # sm_data_json = None
     mollusc_motion_connection_list = None
 
     def set_monsterdriver_hw(self, hw):
@@ -118,11 +121,14 @@ class Spaghettimonster(SerialWrapper):
             # print('No connection to controller board')
             pass
 
+    # def get_sm_data(self, spaghettimonster_id, sensor_index):
+    #     return self.sm_data_json[spaghettimonster_id][sensor_index]
+
+    
     def decode_spaghettimonster(self, spaghettimonster_data):
         sm_data_json = json.loads(spaghettimonster_data)
-        # print(sm_data_json)       # the decoded json data
+
         for key in sm_data_json:    # iterate through every spaghettimonster-id
-            # print(key)
             for mollusc_motion_connection in self.mollusc_motion_connection_list:  # find the spaghettimonster-id in the list of.. 
                 if mollusc_motion_connection.spaghettimonster_id == key:           # ..connections from the mollusc motion list;
                     requested_index = int(mollusc_motion_connection.sensor_index)  # see which index the connection is looking for...
@@ -133,13 +139,19 @@ class Spaghettimonster(SerialWrapper):
                     # print('requested_index:', end='')
                     # print(requested_index)
                     # print('value at requested index:', end='')
+                    sensor = 0
+                    try:
+                        sensor = sm_data_json[key][requested_index]
+                    except:
+                        pass
+
                     if mollusc_motion_connection.enable_invert == True:
-                        mollusc_motion_connection.sensor_value = 1.0 - sm_data_json[key][requested_index] # ...and get the relevant sensor value from the array...
+                        mollusc_motion_connection.sensor_value = 1.0 - sensor # ...and get the relevant sensor value from the array...
                     else:
-                        mollusc_motion_connection.sensor_value = sm_data_json[key][requested_index] # ...and get the relevant sensor value from the array...
+                        mollusc_motion_connection.sensor_value = sensor # ...and get the relevant sensor value from the array...
 
 
-                        
+
         return
     
         # animation_data = [0] * 14
@@ -180,11 +192,17 @@ class Spaghettimonster(SerialWrapper):
         try:
             spaghettimonster_data = data.decode('utf-8')
             self.decode_spaghettimonster(spaghettimonster_data)
+
+            # If we are in live mode state, send the sensor data directly to the mollusc motion device.
+            # The values from the sensors that are NOT in live mode are taken from the current frame of the timeline:
+            # animation_data = animation_handler.AnimationCurveModeHandler.get_animation_data(bpy.context.scene)
+            # animation_handler.AnimationCurveModeHandler.send_animation_data(animation_data)
+            
         except SpaghettimonsterDataError:
             print('Spaghettimonster Data Error')
             print(data)
         except:
-            print('[raw bytes] ')
+            print('[raw bytes] ', end='')
             print(data)
 
 class MotorControllerBoard(SerialWrapper):

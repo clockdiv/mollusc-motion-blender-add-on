@@ -17,9 +17,10 @@ import bpy
 from bpy.utils import previews
 import os
 from molluscmotion import hardware
-from molluscmotion.mapping import map_range
 import serial
 import serial.tools.list_ports
+from molluscmotion.mapping import map_range
+from molluscmotion.animation_handler import AnimationCurveModeHandler
 
 
 
@@ -27,136 +28,10 @@ import serial.tools.list_ports
 custom_icons = None
 spaghettimonster_hw = hardware.Spaghettimonster(name = 'Spaghettimonster')
 mollusccontroller_hw = hardware.MotorControllerBoard(name = 'MolluscController')
+AnimationCurveModeHandler.set_mollusc_controller_hw(mollusccontroller_hw)
+AnimationCurveModeHandler.set_spaghettimonster_hw(spaghettimonster_hw)
 
-
-
-class AnimationCurveModeHandler():
-    last_frame_sent = 0
-
-    @staticmethod
-    def frame_was_already_sent():
-        current_frame = bpy.data.scenes[0].frame_current
-        if(AnimationCurveModeHandler.last_frame_sent == current_frame):
-            return True
-        else:
-            AnimationCurveModeHandler.last_frame_sent = current_frame
-            return False
-
-    @staticmethod
-    def get_animation_data(mollusc_connections_list, mollusc_object, global_record_enabled):
-        """Creates a list from the custom properties of the ControllerObject.
-        The list is send to the motorcontrollerboard in this order in send_animation_data()"""
-        animation_data = []
-        try:
-            for mollusc_connection in mollusc_connections_list:
-                # if Live-Input enabled, get data from .sensor_value, else from .linked_property
-                if mollusc_connection.enable_live == True:
-                    connection_data = int(map_range(mollusc_connection.sensor_value, 0.0, 1.0, mollusc_connection.sensor_map_min, mollusc_connection.sensor_map_max))
-                    # record to mollusc_object if enable_rec is check
-                    if mollusc_connection.enable_rec == True and global_record_enabled == True:
-                        custom_property = mollusc_connection.linked_property
-                        mollusc_object[custom_property] = mollusc_connection.sensor_value
-                        mollusc_object.keyframe_insert(data_path = '["'+custom_property+'"]')
-                else:
-                    # mapped_data = int(map_range())
-                    # animation_data.append(mollusc_object[mollusc_connection.linked_property])
-                    connection_data = int(map_range(mollusc_object[mollusc_connection.linked_property], 0.0, 1.0, mollusc_connection.sensor_map_min, mollusc_connection.sensor_map_max))
-
-                animation_data.append(connection_data)
-
-        except KeyError:
-            print('could not read the custom property data I was looking for')
-            return [0]
-         
-        return animation_data
-
-    @staticmethod
-    def send_animation_data(animation_data):
-        """sends the list with animation data - as prepared in get_animation_data()
-        to the motorcontrollerboard as ascii csv data"""
-        animation_data_csv_string = ','.join([str(ad) for ad in animation_data])
-        # spaghettimonster_hw.send(animation_data_csv_string)
-        mollusccontroller_hw.send(animation_data_csv_string)
-
-    @staticmethod
-    def frame_change_handler(scene):
-        if AnimationCurveModeHandler.frame_was_already_sent(): 
-            return
-        try:
-            animation_data = AnimationCurveModeHandler.get_animation_data(scene.mollusc_connections_list, 
-                                                                          scene.mollusc_object, 
-                                                                          scene.record_during_playback)
-        except TypeError:
-            # print('No Object in \'Tiny Puppeteer Object\'')
-            pass
-        else:
-            AnimationCurveModeHandler.send_animation_data(animation_data)
-
-    @staticmethod
-    def graph_editor_update_handler(scene):
-        areatype = None
-        try: 
-            areatype = bpy.context.area.type
-        except:
-            pass
-        else:
-            if areatype == 'GRAPH_EDITOR':
-                print('graph editor, frame: ', end='')
-                print(bpy.data.scenes['Scene'].frame_current)
-                try:
-                    ad = AnimationCurveModeHandler.get_animation_data(scene.mollusc_connections_list, scene.mollusc_object)
-                except TypeError:
-                    # print('No Object in \'Tiny Puppeteer Object\'')
-                    pass
-                else:
-                    AnimationCurveModeHandler.send_animation_data(ad)
-
-    def animation_started_handler(scene):
-        mollusccontroller_hw.send('RUNNING')
-
-    def animation_ended_handler(scene):
-        mollusccontroller_hw.send('MANUAL')
-
-# Operation Mode (Realtime-/Playback Mode or)
-# class OperationMode(bpy.types.PropertyGroup):
-#     def operation_mode_changed(self, context):
-#         if self.operation_mode == '0':      # Switch to 'Manual Mode'
-#             OperationMode.register_handlers()
-#             mollusccontroller_hw.send('MANUAL')
-#             spaghettimonster_hw.set_monsterdriver_hw(None)
-#             print('Switching to Animation Curve Mode')
-#         elif self.operation_mode == '1':    # Switch to 'Running Mode'
-#             OperationMode.unregister_handlers()
-#             spaghettimonster_hw.set_monsterdriver_hw(mollusccontroller_hw)
-#             mollusccontroller_hw.send('RUNNING')
-#             print('Switching to Spaghettimonster Mode')
-#         else:
-#             OperationMode.unregister_handlers()
-#             print('ERROR: unknown operation mode')
-
-#     @staticmethod
-#     def register_handlers():
-#         print('register handlers')
-#         bpy.app.handlers.frame_change_post.append(AnimationCurveModeHandler.frame_change_handler)
-#         bpy.app.handlers.depsgraph_update_post.append(AnimationCurveModeHandler.graph_editor_update_handler)
-#         bpy.app.handlers.animation_playback_pre.append(AnimationCurveModeHandler.animation_started_handler)
-#         bpy.app.handlers.animation_playback_post.append(AnimationCurveModeHandler.animation_ended_handler)
-
-#     @staticmethod
-#     def unregister_handlers():
-#         print('unregister handlers')
-#         bpy.app.handlers.frame_change_post.clear()
-#         bpy.app.handlers.depsgraph_update_post.clear()
-#         bpy.app.handlers.animation_playback_pre.clear()
-#         bpy.app.handlers.animation_playback_post.clear()
-
-#     operation_mode: bpy.props.EnumProperty(
-#         items = (
-#             ('0','Animation Curves','use animation curves', 'RNDCURVE', 1),
-#             ('1','Spaghettimonster','use spaghettimonster', 'POSE_HLT', 2)
-#         ), 
-#         update = operation_mode_changed)
-    
+                        
 # Serial Port Handler
 class SerialPortHandler(bpy.types.PropertyGroup):
     serial_port_enum = []
