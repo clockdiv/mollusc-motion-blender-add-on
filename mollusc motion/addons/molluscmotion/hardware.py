@@ -74,7 +74,10 @@ class SerialWrapper:
         if self.serial_device.is_open:
             # print('success.')
             data += '\n'
-            self.serial_device.write(data.encode('utf-8'))
+            try:
+                self.serial_device.write(data.encode('utf-8'))
+            except serial.SerialException:
+                self.serial_device.close()
         else:
             # print('device not open.')
             pass

@@ -144,7 +144,7 @@ class MolluscConnection(bpy.types.PropertyGroup):
         name = 'Sensor Value',
         description = 'Value of the sensor',
         default = 0,
-        update = update_callback
+        # update = update_callback
     )
     sensor_map_min : bpy.props.IntProperty(
         name = 'Map Min',
