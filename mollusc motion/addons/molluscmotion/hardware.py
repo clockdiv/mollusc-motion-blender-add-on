@@ -48,8 +48,8 @@ class SerialWrapper:
             self.serial_device.open()
         except serial.SerialException:
             print('ERROR: Can\'t connect to ' + self.name)
-        except:
-            print('ERROR: Unknown Error when connnecting to ' + self.name)
+        except Exception as e:
+            print('ERROR: Unknown Error when connnecting to ' + self.name + ": " + str(e))
         else:
             print('CONNECTED')
             # Start background thread to receive serial data

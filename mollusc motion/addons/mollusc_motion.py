@@ -532,9 +532,9 @@ def register():
     bpy.app.handlers.depsgraph_update_post.append(AnimationCurveModeHandler.graph_editor_update_handler)
     bpy.app.handlers.animation_playback_pre.append(AnimationCurveModeHandler.animation_started_handler)
     bpy.app.handlers.animation_playback_post.append(AnimationCurveModeHandler.animation_ended_handler)
+
+    SerialPortHandler.update_serial_ports()
     
-
-
 def unregister():
     remove_custom_icons()
 
@@ -557,7 +557,6 @@ def unregister():
     bpy.app.handlers.depsgraph_update_post.clear()
     bpy.app.handlers.animation_playback_pre.clear()
     bpy.app.handlers.animation_playback_post.clear()
-
 
 def load_custom_icons():
     global custom_icons
