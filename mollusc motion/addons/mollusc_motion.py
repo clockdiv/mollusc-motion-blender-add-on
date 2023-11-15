@@ -440,6 +440,7 @@ class HARDWARE_PT_molluscmotion_setup(bpy.types.Panel):
         col.separator()
         col.prop(context.scene, 'record_during_playback', text='Record during Playback (to the connections where \'rec\' is enabled)',
                   icon='SHADING_SOLID')
+        col.prop(context.scene, 'enable_outputs')
         # col.label(text='Select Mode:')
         # op_mode_row=col.row()
         # op_mode_row.prop(context.scene.operation_mode, 'operation_mode', expand=True,text='')
@@ -527,6 +528,7 @@ def register():
     bpy.types.Scene.mollusc_connections_list_index = bpy.props.IntProperty(name = 'Spaghettimonster ID', default = 0)
     bpy.types.Scene.new_prop_name = bpy.props.StringProperty(name = 'New Properties Name', default = 'prop')
     bpy.types.Scene.record_during_playback = bpy.props.BoolProperty(name = 'Record During Playback', default = False)
+    bpy.types.Scene.enable_outputs = bpy.props.BoolProperty(name = 'Enable Outputs', default = False)
 
     bpy.app.handlers.frame_change_post.append(AnimationCurveModeHandler.frame_change_handler)
     bpy.app.handlers.depsgraph_update_post.append(AnimationCurveModeHandler.graph_editor_update_handler)
@@ -549,6 +551,7 @@ def unregister():
     del bpy.types.Scene.mollusc_connections_list_index
     del bpy.types.Scene.new_prop_name
     del bpy.types.Scene.record_during_playback
+    del bpy.types.Scene.enable_outputs
 
     spaghettimonster_hw.disconnectSerial()
     mollusccontroller_hw.disconnectSerial()

@@ -31,7 +31,10 @@ class AnimationCurveModeHandler():
 
     @staticmethod
     # def get_animation_data(mollusc_connections_list, mollusc_object, global_record_enabled):
-    def get_animation_data(scene):        
+    def get_animation_data(scene):
+        if not scene.enable_outputs:
+            return
+
         """Creates a list from the custom properties of the ControllerObject.
         The list is send to the motorcontrollerboard in this order in send_animation_data()"""
         # mollusc_connections_list = scene.mollusc_connections_list
@@ -71,7 +74,7 @@ class AnimationCurveModeHandler():
         AnimationCurveModeHandler.mollusccontroller_hw.send(animation_data_csv_string)
 
     @staticmethod
-    def frame_change_handler(scene):
+    def frame_change_handler(scene):        
         if AnimationCurveModeHandler.frame_was_already_sent(): 
             return
         try:
@@ -94,8 +97,8 @@ class AnimationCurveModeHandler():
             pass
         else:
             if areatype == 'GRAPH_EDITOR':
-                print('graph editor, frame: ', end='')
-                print(bpy.data.scenes['Scene'].frame_current)
+                # print('graph editor, frame: ', end='')
+                # print(bpy.data.scenes['Scene'].frame_current)
                 try:
                     # ad = AnimationCurveModeHandler.get_animation_data(scene.mollusc_connections_list, scene.mollusc_object)
                     ad = AnimationCurveModeHandler.get_animation_data(scene)
