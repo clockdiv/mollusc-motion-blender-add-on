@@ -3,6 +3,8 @@ from bpy.utils import previews
 import os
 from molluscmotion import hardware
 from molluscmotion.mapping import map_range
+import subprocess
+import sys
 
 try:
     import serial
