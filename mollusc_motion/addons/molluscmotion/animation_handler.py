@@ -3,8 +3,18 @@ from bpy.utils import previews
 import os
 from molluscmotion import hardware
 from molluscmotion.mapping import map_range
-import serial
-import serial.tools.list_ports
+
+try:
+    import serial
+except ModuleNotFoundError:
+    print('Module pyserial not found, trying to install...')
+    subprocess.check_call([sys.executable, "-m", "pip", "install", 'pyserial'])
+    import serial
+    import serial.tools.list_ports
+    print('pyserial installed and imported')
+
+# import serial
+# import serial.tools.list_ports
 
 
 class AnimationCurveModeHandler():
