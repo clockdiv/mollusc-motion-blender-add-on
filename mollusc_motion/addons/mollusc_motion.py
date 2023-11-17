@@ -1,14 +1,14 @@
 
 bl_info = {
     "name": "mollusc motion",
-    "author": "Julian",
+    "author": "clockdiv",
     "version": (1, 0),
     "blender": (3, 6, 2),
     "category": "Hardware",
-    "location": "",
+    "location": "Graph Editor -> Sidebar -> mollusc motion",
     "description": "an organic and open source motion capture and motion control system",
-    "warning" : "",
-    "doc_url": "",
+    "warning" : "It may take some seconds to enable the add-on because it might need to install pyserial",
+    "doc_url": "https://clockdiv.github.io/mollusc-motion/",
     "tracker_url": ""
 }
 
