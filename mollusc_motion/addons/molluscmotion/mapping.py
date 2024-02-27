@@ -3,6 +3,15 @@ import bpy
 def map_range(x, in_min, in_max, out_min, out_max):
   return (x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min
 
+def clamp(x, out_min, out_max):
+  if x > out_max:
+    return out_max
+  elif x < out_min:
+    return out_min
+  else:
+    return x
+
+
 '''
 def map_animation_data(sm_data_floats):
     animation_data = [0] * 14

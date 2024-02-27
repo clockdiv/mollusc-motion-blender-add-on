@@ -13,15 +13,18 @@ bl_info = {
 }
 
 
+from typing import Set
 import bpy
+from bpy.types import Context
 from bpy.utils import previews
 import os
+from importlib import reload
 from molluscmotion import hardware
 import serial
 import serial.tools.list_ports
-from molluscmotion.mapping import map_range
+# from molluscmotion.mapping import map_range
 from molluscmotion.animation_handler import AnimationCurveModeHandler
-
+from molluscmotion import file_handler
 
 
 # global variables
@@ -217,7 +220,24 @@ class LIST_UL_MolluscConnections(bpy.types.UIList):
             layout.label(text = '['+str(index)+']')
 
 
+#                   Properties for Save-To-Disk Panel
 
+class MolluscMotionSaveToDiskProps(bpy.types.PropertyGroup):
+    """a single item in the list with a group of properties"""
+    start_frame : bpy.props.IntProperty(
+        name = 'Start',
+        description = 'Frame where the animation starts',
+        default = 0
+    )
+    end_frame : bpy.props.IntProperty(
+        name = 'End',
+        description = 'Frame where the animation ends',
+        default = 250
+    )
+    filename: bpy.props.StringProperty(
+        name = 'Filename',
+        description='Filename to store animation data to',
+        subtype='FILE_PATH')
 
 
 #                   Operators for Hardware Connections
@@ -376,6 +396,26 @@ class LIST_OT_MolluscMoveConnectionDown(bpy.types.Operator):
         return{'FINISHED'}
 
 
+#                   Operator for Save-To-Disk Panel
+
+class FILE_OT_MolluscMotion_SaveToDisk(bpy.types.Operator):
+    """Iterates the timeline in the range of the given start- and end frame and 
+    saves the data to a binary file"""
+
+    bl_idname = 'molluscmotion_save_to_disk.save_file'
+    bl_label = 'Save to Disk'
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        start_frame = context.scene.molluscmotion_save_to_disk_props.start_frame
+        end_frame = context.scene.molluscmotion_save_to_disk_props.end_frame
+        filename = context.scene.molluscmotion_save_to_disk_props.filename
+        scene = context.scene
+        file_handler.save_to_disk(scene, start_frame, end_frame, filename)
+        return {'FINISHED'}
 
 
 #                   Panels
@@ -491,6 +531,32 @@ class HARDWARE_PT_molluscmotion_connectionslist(bpy.types.Panel):
         # col.prop(context.scene.recorder, 'float_value', text='Value')
 
 
+class HARDWARE_PT_molluscmotion_save_to_file(bpy.types.Panel):
+    """Panel to write the animation data to a binary file"""
+    bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_SAVE_TO_FILE'
+    bl_label = 'Save to File'
+    bl_space_type = 'GRAPH_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = 'mollusc motion'
+        
+    def draw(self, context):
+        col = self.layout.column()
+        
+        start_end_col = col.column(align=True)
+        start_end_col.use_property_split = True
+        start_end_col.use_property_decorate = False  # No animation.
+        start_end_col.prop(context.scene.molluscmotion_save_to_disk_props, 'start_frame', text='Frame Start')
+        start_end_col.prop(context.scene.molluscmotion_save_to_disk_props, 'end_frame', text='End')
+        
+        filename_row = col.row()
+        filename_row.use_property_split = True
+        filename_row.use_property_decorate = False
+        filename_row.prop(context.scene.molluscmotion_save_to_disk_props, 'filename')
+
+        col.operator(FILE_OT_MolluscMotion_SaveToDisk.bl_idname)
+
+
+        
 
 
 
@@ -511,7 +577,10 @@ classes =  (HARDWARE_PT_molluscmotion_setup,
             # OperationMode,
             MolluscConnection,
             HARDWARE_PT_molluscmotion_connectionslist,
-            LIST_UL_MolluscConnections
+            LIST_UL_MolluscConnections,
+            HARDWARE_PT_molluscmotion_save_to_file,
+            MolluscMotionSaveToDiskProps,
+            FILE_OT_MolluscMotion_SaveToDisk
             )
 
 def register():
@@ -529,6 +598,8 @@ def register():
     bpy.types.Scene.new_prop_name = bpy.props.StringProperty(name = 'New Properties Name', default = 'prop')
     bpy.types.Scene.record_during_playback = bpy.props.BoolProperty(name = 'Record During Playback', default = False)
     bpy.types.Scene.enable_outputs = bpy.props.BoolProperty(name = 'Enable Outputs', default = False)
+    
+    bpy.types.Scene.molluscmotion_save_to_disk_props = bpy.props.PointerProperty(type = MolluscMotionSaveToDiskProps) 
 
     bpy.app.handlers.frame_change_post.append(AnimationCurveModeHandler.frame_change_handler)
     bpy.app.handlers.depsgraph_update_post.append(AnimationCurveModeHandler.graph_editor_update_handler)
@@ -536,6 +607,8 @@ def register():
     bpy.app.handlers.animation_playback_post.append(AnimationCurveModeHandler.animation_ended_handler)
 
     SerialPortHandler.update_serial_ports()
+
+    reload(file_handler) # for development only
     
 def unregister():
     remove_custom_icons()
@@ -552,6 +625,8 @@ def unregister():
     del bpy.types.Scene.new_prop_name
     del bpy.types.Scene.record_during_playback
     del bpy.types.Scene.enable_outputs
+
+    del bpy.types.Scene.molluscmotion_save_to_disk_props
 
     spaghettimonster_hw.disconnectSerial()
     mollusccontroller_hw.disconnectSerial()
