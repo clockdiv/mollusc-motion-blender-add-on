@@ -83,7 +83,10 @@ class AnimationCurveModeHandler():
         to the motorcontrollerboard as ascii csv data"""
         animation_data_csv_string = ','.join([str(ad) for ad in animation_data])
         # spaghettimonster_hw.send(animation_data_csv_string)
-        AnimationCurveModeHandler.mollusccontroller_hw.send(animation_data_csv_string)
+        print(bpy.data.scenes['SceneA'].frame_current, end=',\t')
+        print(animation_data_csv_string)
+        if AnimationCurveModeHandler.mollusccontroller_hw != None:
+            AnimationCurveModeHandler.mollusccontroller_hw.send(animation_data_csv_string)
 
     @staticmethod
     def frame_change_handler(scene):        
@@ -122,8 +125,10 @@ class AnimationCurveModeHandler():
 
     @staticmethod
     def animation_started_handler(scene):
-        AnimationCurveModeHandler.mollusccontroller_hw.send('RUNNING')
-    
+        if AnimationCurveModeHandler.mollusccontroller_hw != None:
+            AnimationCurveModeHandler.mollusccontroller_hw.send('RUNNING')
+
     @staticmethod
     def animation_ended_handler(scene):
-        AnimationCurveModeHandler.mollusccontroller_hw.send('MANUAL')
+        if AnimationCurveModeHandler.mollusccontroller_hw != None:
+            AnimationCurveModeHandler.mollusccontroller_hw.send('MANUAL')

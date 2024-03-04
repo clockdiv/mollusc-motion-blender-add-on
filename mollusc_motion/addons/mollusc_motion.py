@@ -19,12 +19,15 @@ from bpy.types import Context
 from bpy.utils import previews
 import os
 from importlib import reload
-from molluscmotion import hardware
 import serial
 import serial.tools.list_ports
 # from molluscmotion.mapping import map_range
+from molluscmotion import hardware
+import molluscmotion.animation_handler
 from molluscmotion.animation_handler import AnimationCurveModeHandler
-from molluscmotion import file_handler
+
+import molluscmotion.file_handler
+from molluscmotion.file_handler import save_to_disk
 
 
 # global variables
@@ -414,7 +417,7 @@ class FILE_OT_MolluscMotion_SaveToDisk(bpy.types.Operator):
         end_frame = context.scene.molluscmotion_save_to_disk_props.end_frame
         filename = context.scene.molluscmotion_save_to_disk_props.filename
         scene = context.scene
-        file_handler.save_to_disk(scene, start_frame, end_frame, filename)
+        save_to_disk(scene, start_frame, end_frame, filename)
         return {'FINISHED'}
 
 
@@ -608,8 +611,9 @@ def register():
 
     SerialPortHandler.update_serial_ports()
 
-    reload(file_handler) # for development only
-    
+    reload(molluscmotion.file_handler) # for development only
+    reload(molluscmotion.animation_handler)
+
 def unregister():
     remove_custom_icons()
 
