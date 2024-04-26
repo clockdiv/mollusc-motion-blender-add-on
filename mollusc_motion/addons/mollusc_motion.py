@@ -28,14 +28,13 @@ from molluscmotion.animation_handler import AnimationCurveModeHandler
 
 import molluscmotion.file_handler
 from molluscmotion.file_handler import save_to_disk
+import molluscmotion.hardware
 
 
 # global variables
 custom_icons = None
 spaghettimonster_hw = hardware.Spaghettimonster(name = 'Spaghettimonster')
 mollusccontroller_hw = hardware.MotorControllerBoard(name = 'MolluscController')
-AnimationCurveModeHandler.set_mollusc_controller_hw(mollusccontroller_hw)
-AnimationCurveModeHandler.set_spaghettimonster_hw(spaghettimonster_hw)
 
                         
 # Serial Port Handler
@@ -421,6 +420,70 @@ class FILE_OT_MolluscMotion_SaveToDisk(bpy.types.Operator):
         return {'FINISHED'}
 
 
+#                   Operators for Set-Change Panel (Debug/WIP)
+
+class SERIAL_OT_MolluscMotion_SetState_Manual(bpy.types.Operator):
+    """Sends a command via serial to set the state of the
+    mollusc motion board"""
+
+    bl_idname = 'molluscmotion_set_state.manual'
+    bl_label = 'Manual'
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        mollusccontroller_hw.send('MANUAL')
+        return {'FINISHED'}
+
+
+class SERIAL_OT_MolluscMotion_SetState_Idle(bpy.types.Operator):
+    """Sends a command via serial to set the state of the
+    mollusc motion board"""
+
+    bl_idname = 'molluscmotion_set_state.idle'
+    bl_label = 'Idle'
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        mollusccontroller_hw.send('IDLE')
+        return {'FINISHED'}
+
+class SERIAL_OT_MolluscMotion_SetState_Running(bpy.types.Operator):
+    """Sends a command via serial to set the state of the
+    mollusc motion board"""
+
+    bl_idname = 'molluscmotion_set_state.running'
+    bl_label = 'Running'
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        mollusccontroller_hw.send('RUNNING')
+        return {'FINISHED'}
+
+class SERIAL_OT_MolluscMotion_SetState_HomingA(bpy.types.Operator):
+    """Sends a command via serial to set the state of the
+    mollusc motion board"""
+
+    bl_idname = 'molluscmotion_set_state.homing_a'
+    bl_label = 'Homing A'
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        mollusccontroller_hw.send('HOMINGA')
+        return {'FINISHED'}
+
+
 #                   Panels
 
 class HARDWARE_PT_molluscmotion_setup(bpy.types.Panel):
@@ -559,8 +622,20 @@ class HARDWARE_PT_molluscmotion_save_to_file(bpy.types.Panel):
         col.operator(FILE_OT_MolluscMotion_SaveToDisk.bl_idname)
 
 
-        
+class HARDWARE_PT_molluscmotion_set_state(bpy.types.Panel):
+    """Panel to set the state of the mollusc motion board"""  
+    bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_SET_STATE'
+    bl_label = 'Set State'
+    bl_space_type = 'GRAPH_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = 'mollusc motion'
 
+    def draw(self, context):
+        row = self.layout.row()
+        row.operator(SERIAL_OT_MolluscMotion_SetState_Manual.bl_idname)
+        row.operator(SERIAL_OT_MolluscMotion_SetState_Idle.bl_idname)
+        row.operator(SERIAL_OT_MolluscMotion_SetState_Running.bl_idname)
+        row.operator(SERIAL_OT_MolluscMotion_SetState_HomingA.bl_idname)
 
 
 #                   Blender Registration
@@ -583,10 +658,19 @@ classes =  (HARDWARE_PT_molluscmotion_setup,
             LIST_UL_MolluscConnections,
             HARDWARE_PT_molluscmotion_save_to_file,
             MolluscMotionSaveToDiskProps,
-            FILE_OT_MolluscMotion_SaveToDisk
+            FILE_OT_MolluscMotion_SaveToDisk,
+            SERIAL_OT_MolluscMotion_SetState_Manual,
+            SERIAL_OT_MolluscMotion_SetState_Idle,
+            SERIAL_OT_MolluscMotion_SetState_Running,
+            SERIAL_OT_MolluscMotion_SetState_HomingA,
+            HARDWARE_PT_molluscmotion_set_state
             )
 
 def register():
+    reload(molluscmotion.file_handler) # for development only
+    reload(molluscmotion.animation_handler)
+    reload(molluscmotion.hardware)
+
     load_custom_icons()
 
     for cls in classes:
@@ -611,8 +695,10 @@ def register():
 
     SerialPortHandler.update_serial_ports()
 
-    reload(molluscmotion.file_handler) # for development only
-    reload(molluscmotion.animation_handler)
+
+    AnimationCurveModeHandler.set_mollusc_controller_hw(mollusccontroller_hw)
+    AnimationCurveModeHandler.set_spaghettimonster_hw(spaghettimonster_hw)
+
 
 def unregister():
     remove_custom_icons()

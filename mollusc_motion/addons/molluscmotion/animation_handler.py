@@ -45,6 +45,7 @@ class AnimationCurveModeHandler():
     # def get_animation_data(mollusc_connections_list, mollusc_object, global_record_enabled):
     def get_animation_data(scene):
         if not scene.enable_outputs:
+            print("Please enable outputs")
             return
 
         """Creates a list from the custom properties of the ControllerObject.
@@ -83,7 +84,8 @@ class AnimationCurveModeHandler():
         to the motorcontrollerboard as ascii csv data"""
         animation_data_csv_string = ','.join([str(ad) for ad in animation_data])
         # spaghettimonster_hw.send(animation_data_csv_string)
-        print(bpy.data.scenes['SceneA'].frame_current, end=',\t')
+        print('Sending... ', end='\t')
+        print(bpy.data.scenes['Scene'].frame_current, end=',\t')
         print(animation_data_csv_string)
         if AnimationCurveModeHandler.mollusccontroller_hw != None:
             AnimationCurveModeHandler.mollusccontroller_hw.send(animation_data_csv_string)
@@ -118,7 +120,7 @@ class AnimationCurveModeHandler():
                     # ad = AnimationCurveModeHandler.get_animation_data(scene.mollusc_connections_list, scene.mollusc_object)
                     ad = AnimationCurveModeHandler.get_animation_data(scene)
                 except TypeError:
-                    # print('No Object in \'Tiny Puppeteer Object\'')
+                    print('No Object in \'Tiny Puppeteer Object\'')
                     pass
                 else:
                     AnimationCurveModeHandler.send_animation_data(ad)
