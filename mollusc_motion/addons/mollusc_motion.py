@@ -17,10 +17,12 @@ from typing import Set
 import bpy
 from bpy.types import Context
 from bpy.utils import previews
+from bpy.props import IntProperty, FloatProperty
 import os
 from importlib import reload
 import serial
 import serial.tools.list_ports
+# import XInput
 # from molluscmotion.mapping import map_range
 from molluscmotion import hardware
 import molluscmotion.animation_handler
@@ -30,12 +32,12 @@ import molluscmotion.file_handler
 from molluscmotion.file_handler import save_to_disk
 import molluscmotion.hardware
 
-
 # global variables
 custom_icons = None
 spaghettimonster_hw = hardware.Spaghettimonster(name = 'Spaghettimonster')
 mollusccontroller_hw = hardware.MotorControllerBoard(name = 'MolluscController')
-
+stop_modal = False
+modal_running = False
                         
 # Serial Port Handler
 class SerialPortHandler(bpy.types.PropertyGroup):
@@ -303,8 +305,101 @@ class HARDWARE_OT_disconnect_mollusccontroller(bpy.types.Operator):
         return {'FINISHED'}
 
 
+#                   Modal Operators
 
+'''
+class CONTROL_OT_Modal_XInput(bpy.types.Operator):
+    """Move an object with the mouse, example"""
+    bl_idname = "control.xinput"
+    bl_label = "Simple Modal Operator"
 
+    first_mouse_x: IntProperty()
+    first_value: FloatProperty()
+
+    def modal(self, context, event):
+        if event.type == 'MOUSEMOVE':
+            delta = self.first_mouse_x - event.mouse_x
+            context.object.location.x = self.first_value + delta * 0.01
+
+        elif event.type == 'LEFTMOUSE':
+            return {'FINISHED'}
+
+        elif event.type in {'RIGHTMOUSE', 'ESC'}:
+            context.object.location.x = self.first_value
+            return {'CANCELLED'}
+
+        
+        return {'RUNNING_MODAL'}
+
+    def invoke(self, context, event):
+        if context.object:
+            self.first_mouse_x = event.mouse_x
+            self.first_value = context.object.location.x
+
+            context.window_manager.modal_handler_add(self)
+            return {'RUNNING_MODAL'}
+        else:
+            self.report({'WARNING'}, "No active object, could not finish")
+            return {'CANCELLED'}
+
+def menu_func(self, context):
+    self.layout.operator(CONTROL_OT_Modal_XInput.bl_idname, text=CONTROL_OT_Modal_XInput.bl_label)
+
+'''
+class CONTROL_OT_Modal_XInput(bpy.types.Operator):
+    """Move an object with the mouse, example"""
+    bl_idname = "control.xinput"
+    bl_label = "Simple Modal Operator"
+
+    # first_mouse_x: IntProperty()
+    # first_value: FloatProperty()
+
+    _timer = None
+
+    def modal(self, context, event):
+        global stop_modal
+        global modal_running
+
+        if event.type == 'TIMER':
+            print(self._timer)
+        
+        if stop_modal == True:
+            modal_running = False
+            wm = context.window_manager
+            wm.event_timer_remove(self._timer)
+            return{'FINISHED'}
+        
+        return{'PASS_THROUGH'}
+    
+    def execute(self, context):
+        global stop_modal
+        global modal_running
+        if modal_running == False:
+            stop_modal = False
+            modal_running = True
+
+            wm = context.window_manager
+            self._timer = wm.event_timer_add(.1, window=context.window)
+            wm.modal_handler_add(self)
+            return{'RUNNING_MODAL'}
+        
+        return {'CANCELLED'}
+
+    def cancel(self, context):
+        wm = context.window_manager
+        wm.event_timer_remove(self._timer)
+        return {'CANCELLED'}
+
+    # def invoke(self, context, event):
+    #     if context.object:
+    #         self.first_mouse_x = event.mouse_x
+    #         self.first_value = context.object.location.x
+
+    #         context.window_manager.modal_handler_add(self)
+    #         return {'RUNNING_MODAL'}
+    #     else:
+    #         self.report({'WARNING'}, "No active object, could not finish")
+    #         return {'CANCELLED'}
 
 #                   Operators for Mollucs Connections List
 
@@ -437,7 +532,6 @@ class SERIAL_OT_MolluscMotion_SetState_Manual(bpy.types.Operator):
         mollusccontroller_hw.send('MANUAL')
         return {'FINISHED'}
 
-
 class SERIAL_OT_MolluscMotion_SetState_Idle(bpy.types.Operator):
     """Sends a command via serial to set the state of the
     mollusc motion board"""
@@ -482,6 +576,40 @@ class SERIAL_OT_MolluscMotion_SetState_HomingA(bpy.types.Operator):
     def execute(self, context):
         mollusccontroller_hw.send('HOMINGA')
         return {'FINISHED'}
+
+class CONTROL_OT_MolluscMotion_Modal_XInput_Start(bpy.types.Operator):
+    """Starts the modal operator"""
+
+    bl_idname = 'molluscmotion_modal.start'
+    bl_label = 'Start Modal'
+
+    @classmethod
+    def poll(cls, context):
+        global modal_running
+        return not modal_running
+    
+    def execute(self, context):
+        # bpy.ops.control.xinput('INVOKE_DEFAULT')        
+        bpy.ops.control.xinput('EXEC_DEFAULT')        
+        return {'FINISHED'}
+
+class CONTROL_OT_MolluscMotion_Modal_XInput_Stop(bpy.types.Operator):
+    """Stops the modal operator"""
+
+    bl_idname = 'molluscmotion_modal.stop'
+    bl_label = 'Stop Modal'
+
+    @classmethod
+    def poll(cls, context):
+        global modal_running
+        return modal_running
+    
+    def execute(self, context):
+        global stop_modal
+        stop_modal = True
+
+        return {'FINISHED'}
+
 
 
 #                   Panels
@@ -551,7 +679,6 @@ class HARDWARE_PT_molluscmotion_setup(bpy.types.Panel):
         # op_mode_row=col.row()
         # op_mode_row.prop(context.scene.operation_mode, 'operation_mode', expand=True,text='')
 
-        
 class HARDWARE_PT_molluscmotion_connectionslist(bpy.types.Panel):
     """Main panel for the 'record data' add-on"""
     bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_CONNECTIONS_LIST'
@@ -596,7 +723,6 @@ class HARDWARE_PT_molluscmotion_connectionslist(bpy.types.Panel):
         # col.prop(context.scene.recorder, 'is_recording', text='Record when playing')
         # col.prop(context.scene.recorder, 'float_value', text='Value')
 
-
 class HARDWARE_PT_molluscmotion_save_to_file(bpy.types.Panel):
     """Panel to write the animation data to a binary file"""
     bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_SAVE_TO_FILE'
@@ -621,7 +747,6 @@ class HARDWARE_PT_molluscmotion_save_to_file(bpy.types.Panel):
 
         col.operator(FILE_OT_MolluscMotion_SaveToDisk.bl_idname)
 
-
 class HARDWARE_PT_molluscmotion_set_state(bpy.types.Panel):
     """Panel to set the state of the mollusc motion board"""  
     bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_SET_STATE'
@@ -636,6 +761,8 @@ class HARDWARE_PT_molluscmotion_set_state(bpy.types.Panel):
         row.operator(SERIAL_OT_MolluscMotion_SetState_Idle.bl_idname)
         row.operator(SERIAL_OT_MolluscMotion_SetState_Running.bl_idname)
         row.operator(SERIAL_OT_MolluscMotion_SetState_HomingA.bl_idname)
+        row.operator(CONTROL_OT_MolluscMotion_Modal_XInput_Start.bl_idname)
+        row.operator(CONTROL_OT_MolluscMotion_Modal_XInput_Stop.bl_idname)
 
 
 #                   Blender Registration
@@ -663,7 +790,11 @@ classes =  (HARDWARE_PT_molluscmotion_setup,
             SERIAL_OT_MolluscMotion_SetState_Idle,
             SERIAL_OT_MolluscMotion_SetState_Running,
             SERIAL_OT_MolluscMotion_SetState_HomingA,
-            HARDWARE_PT_molluscmotion_set_state
+            CONTROL_OT_MolluscMotion_Modal_XInput_Start,
+            CONTROL_OT_MolluscMotion_Modal_XInput_Stop,
+            HARDWARE_PT_molluscmotion_set_state,
+            CONTROL_OT_Modal_XInput
+            
             )
 
 def register():
@@ -699,6 +830,7 @@ def register():
     AnimationCurveModeHandler.set_mollusc_controller_hw(mollusccontroller_hw)
     AnimationCurveModeHandler.set_spaghettimonster_hw(spaghettimonster_hw)
 
+    # bpy.types.VIEW3D_MT_object.append(menu_func)
 
 def unregister():
     remove_custom_icons()
@@ -725,6 +857,8 @@ def unregister():
     bpy.app.handlers.depsgraph_update_post.clear()
     bpy.app.handlers.animation_playback_pre.clear()
     bpy.app.handlers.animation_playback_post.clear()
+
+    # bpy.types.VIEW3D_MT_object.remove(menu_func)
 
 def load_custom_icons():
     global custom_icons

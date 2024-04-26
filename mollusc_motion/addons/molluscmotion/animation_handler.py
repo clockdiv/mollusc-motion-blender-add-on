@@ -82,11 +82,12 @@ class AnimationCurveModeHandler():
     def send_animation_data(animation_data):
         """sends the list with animation data - as prepared in get_animation_data()
         to the motorcontrollerboard as ascii csv data"""
+        if(animation_data==None):
+            return
         animation_data_csv_string = ','.join([str(ad) for ad in animation_data])
-        # spaghettimonster_hw.send(animation_data_csv_string)
-        print('Sending... ', end='\t')
-        print(bpy.data.scenes['Scene'].frame_current, end=',\t')
-        print(animation_data_csv_string)
+        # print('Sending... ', end='\t')
+        # print(bpy.data.scenes['Scene'].frame_current, end=',\t')
+        # print(animation_data_csv_string)
         if AnimationCurveModeHandler.mollusccontroller_hw != None:
             AnimationCurveModeHandler.mollusccontroller_hw.send(animation_data_csv_string)
 
