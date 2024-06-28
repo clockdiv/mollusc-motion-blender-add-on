@@ -49,7 +49,7 @@ class AnimationCurveModeHandler():
             return
 
         """Creates a list from the custom properties of the ControllerObject.
-        The list is send to the motorcontrollerboard in this order in send_animation_data()"""
+        The list is send to the 'mollusc motion controller board' in the order defined in send_animation_data()"""
         # mollusc_connections_list = scene.mollusc_connections_list
         # mollusc_object = scene.mollusc_object
         animation_data = []

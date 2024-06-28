@@ -19,6 +19,8 @@ from bpy.types import Context
 from bpy.utils import previews
 from bpy.props import IntProperty, FloatProperty
 import os
+import struct
+import math
 from importlib import reload
 import serial
 import serial.tools.list_ports
@@ -27,6 +29,7 @@ import serial.tools.list_ports
 from molluscmotion import hardware
 import molluscmotion.animation_handler
 from molluscmotion.animation_handler import AnimationCurveModeHandler
+from molluscmotion.mapping import map_range
 
 import molluscmotion.file_handler
 from molluscmotion.file_handler import save_to_disk
@@ -36,8 +39,8 @@ import molluscmotion.hardware
 custom_icons = None
 spaghettimonster_hw = hardware.Spaghettimonster(name = 'Spaghettimonster')
 mollusccontroller_hw = hardware.MotorControllerBoard(name = 'MolluscController')
-stop_modal = False
-modal_running = False
+# stop_modal = False
+# modal_running = False
                         
 # Serial Port Handler
 class SerialPortHandler(bpy.types.PropertyGroup):
@@ -123,6 +126,9 @@ class MolluscConnection(bpy.types.PropertyGroup):
         if self.enable_rec == True:
             self.enable_live = True
 
+    def change_name(self, context):
+        self.name = self.linked_property
+
     spaghettimonster_id : bpy.props.EnumProperty(
         name = 'Spaghettimonster ID',
         description = 'ID of the Spaghettimonster',
@@ -183,7 +189,8 @@ class MolluscConnection(bpy.types.PropertyGroup):
     linked_property : bpy.props.EnumProperty(
            name = 'Linked Property',
            description = 'The linked Custom Property',
-           items = get_custom_properties_as_enumlist
+           items = get_custom_properties_as_enumlist,
+           update = change_name
     )
 
 class LIST_UL_MolluscConnections(bpy.types.UIList):
@@ -213,7 +220,6 @@ class LIST_UL_MolluscConnections(bpy.types.UIList):
 
             # Linked Property (enum) to record to / to read data from
             layout.prop(item, 'linked_property', text='')
-
             # Value of the linked property
             if item.linked_property != '':
                 layout.label(text = str(custom_object[item.linked_property]))
@@ -346,8 +352,10 @@ def menu_func(self, context):
     self.layout.operator(CONTROL_OT_Modal_XInput.bl_idname, text=CONTROL_OT_Modal_XInput.bl_label)
 
 '''
+'''
+
 class CONTROL_OT_Modal_XInput(bpy.types.Operator):
-    """Move an object with the mouse, example"""
+    """Modal Timer Example"""
     bl_idname = "control.xinput"
     bl_label = "Simple Modal Operator"
 
@@ -400,6 +408,7 @@ class CONTROL_OT_Modal_XInput(bpy.types.Operator):
     #     else:
     #         self.report({'WARNING'}, "No active object, could not finish")
     #         return {'CANCELLED'}
+'''
 
 #                   Operators for Mollucs Connections List
 
@@ -414,30 +423,35 @@ class LIST_OT_MolluscAddConnection(bpy.types.Operator):
         return True
     
     def execute(self, context):
-        
-        tiny_puppeteer_object = context.scene.mollusc_object
-        if tiny_puppeteer_object == None:
+        # create a new empty object if none exists       
+        molluscmotion_object = context.scene.mollusc_object
+        if molluscmotion_object == None:
             print('creating mollusc motion object...')
             bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
-            tiny_puppeteer_object = context.active_object
-            tiny_puppeteer_object.name = 'mollusc motion'
-            context.scene.mollusc_object = tiny_puppeteer_object
+            molluscmotion_object = context.active_object
+            molluscmotion_object.name = 'mollusc motion'
+            context.scene.mollusc_object = molluscmotion_object
             
 
         # name and create the custom property from user input:
         new_custom_prop = context.scene.new_prop_name
         i = 1
-        while new_custom_prop in tiny_puppeteer_object.keys():
+        while new_custom_prop in molluscmotion_object.keys():
             new_custom_prop = context.scene.new_prop_name + str(i)
             i += 1
-        tiny_puppeteer_object[new_custom_prop] = 0.0
+        molluscmotion_object[new_custom_prop] = 0.0
 
         # setup the new custom prop on the mollusc object (change min/max values)
-        tiny_puppeteer_object.id_properties_ensure() # make sure manager is updated
-        properties_manager = tiny_puppeteer_object.id_properties_ui(new_custom_prop)
+        molluscmotion_object.id_properties_ensure() # make sure manager is updated
+        properties_manager = molluscmotion_object.id_properties_ui(new_custom_prop)
         properties_manager.update(min=0.0, max=1.0)
 
         new_item = context.scene.mollusc_connections_list.add()
+        print('new custom prop name: ', end='')
+        print(new_custom_prop)
+        #new_item.name = new_custom_prop # the name should change when another property is selected, so that's not a good idea. 
+        new_item.linked_property = new_custom_prop
+        print(dir(new_item))
         # todo: link the custom prop to new_item, this has to be done manually now
          
         return{'FINISHED'}
@@ -492,15 +506,202 @@ class LIST_OT_MolluscMoveConnectionDown(bpy.types.Operator):
             context.scene.mollusc_connections_list_index = index + 1
         return{'FINISHED'}
 
+'''
+class LIST_OT_MolluscMotionStepperChannels_Add(bpy.types.Operator):
+    """Add a new connection item to the list."""
 
-#                   Operator for Save-To-Disk Panel
+    bl_idname = "molluscmotion_stepper_channels.add"
+    bl_label = "Add connection"
 
-class FILE_OT_MolluscMotion_SaveToDisk(bpy.types.Operator):
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        
+        tiny_puppeteer_object = context.scene.mollusc_object
+        if tiny_puppeteer_object == None:
+            print('creating mollusc motion object...')
+            bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+            tiny_puppeteer_object = context.active_object
+            tiny_puppeteer_object.name = 'mollusc motion'
+            context.scene.mollusc_object = tiny_puppeteer_object
+            
+
+        # name and create the custom property from user input:
+        new_custom_prop = context.scene.molluscmotion_stepper_channel_name
+        i = 1
+        while new_custom_prop in tiny_puppeteer_object.keys():
+            new_custom_prop = context.scene.molluscmotion_stepper_channel_name + str(i)
+            i += 1
+        tiny_puppeteer_object[new_custom_prop] = 0.0
+
+        # setup the new custom prop on the mollusc object (change min/max values)
+        tiny_puppeteer_object.id_properties_ensure() # make sure manager is updated
+        properties_manager = tiny_puppeteer_object.id_properties_ui(new_custom_prop)
+        properties_manager.update(min=0.0, max=1.0)
+
+        new_item = context.scene.molluscmotion_stepper_channels.add()
+        # todo: link the custom prop to new_item, this has to be done manually now
+         
+        return{'FINISHED'}
+
+class LIST_OT_MolluscMotionStepperChannels_Delete(bpy.types.Operator):
+    """Deletes the selected connection from the list."""
+
+    bl_idname = "molluscmotion_stepper_channels.delete"
+    bl_label = "Delete selected connection"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        index = context.scene.molluscmotion_stepper_channel_index
+        context.scene.molluscmotion_stepper_channels.remove(context.scene.molluscmotion_stepper_channel_index) # remove from list
+        return{'FINISHED'}
+    
+class LIST_OT_MolluscMotionStepperChannels_MoveUp(bpy.types.Operator):
+    """Moves the selected item up in the list."""
+
+    bl_idname = "molluscmotion_stepper_channels.move_up"
+    bl_label = "Move Up"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        index = context.scene.molluscmotion_stepper_channel_index
+        if index > 0:
+            context.scene.molluscmotion_stepper_channel_index.move(index, index-1)
+            context.scene.molluscmotion_stepper_channel_index = index - 1
+        return{'FINISHED'}
+
+class LIST_OT_MolluscMotionStepperChannels_MoveDown(bpy.types.Operator):
+    """Moves the selected item down in the list."""
+
+    bl_idname = "molluscmotion_stepper_channels.move_down"
+    bl_label = "Move Down"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        index = context.scene.molluscmotion_stepper_channel_index
+        max_index = len(context.scene.molluscmotion_stepper_channel_index) - 1
+        if index < max_index:
+            context.scene.molluscmotion_stepper_channel_index.move(index, index+1)
+            context.scene.molluscmotion_stepper_channel_index = index + 1
+        return{'FINISHED'}
+
+
+class LIST_OT_MolluscMotionDynamixelChannels_Add(bpy.types.Operator):
+    """Add a new connection item to the list."""
+
+    bl_idname = "molluscmotion_dynamixel_channels.add"
+    bl_label = "Add connection"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        
+        tiny_puppeteer_object = context.scene.mollusc_object
+        if tiny_puppeteer_object == None:
+            print('creating mollusc motion object...')
+            bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+            tiny_puppeteer_object = context.active_object
+            tiny_puppeteer_object.name = 'mollusc motion'
+            context.scene.mollusc_object = tiny_puppeteer_object
+            
+
+        # name and create the custom property from user input:
+        new_custom_prop = context.scene.molluscmotion_dynamixel_channel_name
+        i = 1
+        while new_custom_prop in tiny_puppeteer_object.keys():
+            new_custom_prop = context.scene.molluscmotion_dynamixel_channel_name + str(i)
+            i += 1
+        tiny_puppeteer_object[new_custom_prop] = 0.0
+
+        # setup the new custom prop on the mollusc object (change min/max values)
+        tiny_puppeteer_object.id_properties_ensure() # make sure manager is updated
+        properties_manager = tiny_puppeteer_object.id_properties_ui(new_custom_prop)
+        properties_manager.update(min=0.0, max=1.0)
+
+        new_item = context.scene.molluscmotion_dynamixel_channels.add()
+        # todo: link the custom prop to new_item, this has to be done manually now
+         
+        return{'FINISHED'}
+
+class LIST_OT_MolluscMotionDynamixelChannels_Delete(bpy.types.Operator):
+    """Deletes the selected connection from the list."""
+
+    bl_idname = "molluscmotion_dynamixel_channels.delete"
+    bl_label = "Delete selected connection"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        index = context.scene.molluscmotion_dynamixel_channel_index
+        context.scene.molluscmotion_dynamixel_channels.remove(context.scene.molluscmotion_dynamixel_channel_index) # remove from list
+        return{'FINISHED'}
+    
+class LIST_OT_MolluscMotionDynamixelChannels_MoveUp(bpy.types.Operator):
+    """Moves the selected item up in the list."""
+
+    bl_idname = "molluscmotion_dynamixel_channels.move_up"
+    bl_label = "Move Up"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        index = context.scene.molluscmotion_dynamixel_channel_index
+        if index > 0:
+            context.scene.molluscmotion_dynamixel_channel_index.move(index, index-1)
+            context.scene.molluscmotion_dynamixel_channel_index = index - 1
+        return{'FINISHED'}
+
+class LIST_OT_MolluscMotionDynamixelChannels_MoveDown(bpy.types.Operator):
+    """Moves the selected item down in the list."""
+
+    bl_idname = "molluscmotion_dynamixel_channels.move_down"
+    bl_label = "Move Down"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        index = context.scene.molluscmotion_dynamixel_channel_index
+        max_index = len(context.scene.molluscmotion_dynamixel_channel_index) - 1
+        if index < max_index:
+            context.scene.molluscmotion_dynamixel_channel_index.move(index, index+1)
+            context.scene.molluscmotion_dynamixel_channel_index = index + 1
+        return{'FINISHED'}
+'''
+'''
+LIST_OT_MolluscMotionDynamixelChannels_Add
+LIST_OT_MolluscMotionDynamixelChannels_Delete
+LIST_OT_MolluscMotionDynamixelChannels_MoveUp
+LIST_OT_MolluscMotionDynamixelChannels_MoveDown
+'''
+
+
+#                   Operator for Save-To-File Panel
+
+class FILE_OT_MolluscMotion_SaveToFile(bpy.types.Operator):
     """Iterates the timeline in the range of the given start- and end frame and 
     saves the data to a binary file"""
 
     bl_idname = 'molluscmotion_save_to_disk.save_file'
-    bl_label = 'Save to Disk'
+    bl_label = 'Save to File'
 
     @classmethod
     def poll(cls, context):
@@ -513,6 +714,96 @@ class FILE_OT_MolluscMotion_SaveToDisk(bpy.types.Operator):
         scene = context.scene
         save_to_disk(scene, start_frame, end_frame, filename)
         return {'FINISHED'}
+
+#                   Operator for Load-From-File Panel
+
+class FILE_OT_MolluscMotion_LoadFromFile(bpy.types.Operator):
+    """Loads binary data from a file"""
+
+    bl_idname = 'molluscmotion_save_to_disk.load_file'
+    bl_label = 'Load from File'
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    filter_glob: bpy.props.StringProperty(default='*.bin', options={'HIDDEN'})
+
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def execute(self, context):
+        print('load from file')
+        print(self.filepath)
+        scene = context.scene
+        try:
+            # Open and read the selected file
+            with open(self.filepath, 'rb') as file:
+                file_contents = file.read()
+                self.report({'INFO'}, "File read successfully")
+
+                # Parsing the binary data into a list with unsigned int
+                byte_count = 2
+                animation_data = []
+                for i in range(0, len(file_contents), byte_count):
+                    value = struct.unpack_from('<H', file_contents, i)[0]
+                    animation_data.append(value)
+
+                # create a new empty object
+                print('creating mollusc motion object...')
+                bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+                molluscmotion_object = context.active_object
+                molluscmotion_object.name = 'mollusc motion'
+
+                # add the custom properties from the 'connections list' to the new object
+                print('number of elements in mollusc_connection_list:')
+                print(len(scene.mollusc_connections_list))
+                prop_names = []
+                mapping_min_values = []
+                mapping_max_values = []
+                for mollusc_connection in scene.mollusc_connections_list:
+                    prop_name = 'Unnamed'
+                    if mollusc_connection.name != '':
+                        prop_name = mollusc_connection.name
+                    molluscmotion_object[prop_name] = 0.0
+                    prop_names.append(prop_name)
+                    mapping_min_values.append(mollusc_connection.sensor_map_min)
+                    mapping_max_values.append(mollusc_connection.sensor_map_max)
+
+                # insert the keyframes for each channel
+                start_frame = context.scene.molluscmotion_save_to_disk_props.start_frame
+                current_frame = start_frame
+                tracks_count = len(prop_names)
+                print('tracks count: ' + str(tracks_count))
+                for keyframe_value, i in zip(animation_data, range(0, len(animation_data))):
+                    # normalize the 16-bit value to a float between 0 and 1
+                    # according to the min/max setting of each connection-entry
+                    track_index = i % tracks_count
+                    prop_name_ = prop_names[track_index]
+                    min = mapping_min_values[track_index]
+                    max = mapping_max_values[track_index]
+                    
+                    keyframe_value_mapped = map_range(keyframe_value, min, max, 0.0, 1.0)
+                    # print(prop_name_, keyframe_value, keyframe_value_mapped)
+
+                    molluscmotion_object[prop_name_] = keyframe_value_mapped
+                    molluscmotion_object.keyframe_insert(data_path = '["' + prop_name_ + '"]', frame = math.floor(current_frame))
+
+                    current_frame += 1 / tracks_count
+
+
+
+                # use the new object
+                context.scene.mollusc_object = molluscmotion_object
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to read file: {e}")
+            return {'CANCELLED'}
+
+
+    def invoke(self, context, event):
+        # Open the file selector dialog
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
 
 
 #                   Operators for Set-Change Panel (Debug/WIP)
@@ -577,6 +868,8 @@ class SERIAL_OT_MolluscMotion_SetState_HomingA(bpy.types.Operator):
         mollusccontroller_hw.send('HOMINGA')
         return {'FINISHED'}
 
+
+'''
 class CONTROL_OT_MolluscMotion_Modal_XInput_Start(bpy.types.Operator):
     """Starts the modal operator"""
 
@@ -609,7 +902,7 @@ class CONTROL_OT_MolluscMotion_Modal_XInput_Stop(bpy.types.Operator):
         stop_modal = True
 
         return {'FINISHED'}
-
+'''
 
 
 #                   Panels
@@ -693,17 +986,45 @@ class HARDWARE_PT_molluscmotion_connectionslist(bpy.types.Panel):
         # List with custom properties:
         col.template_list("LIST_UL_MolluscConnections", "The_List", context.scene,
                           "mollusc_connections_list", context.scene, "mollusc_connections_list_index")
-        
-        
         row = col.row(align=False)
+        row.prop(context.scene, 'new_prop_name', text='')
+        row.operator(LIST_OT_MolluscAddConnection.bl_idname, text='', icon = 'ADD')
+        row.operator(LIST_OT_MolluscDeleteConnection.bl_idname, text='', icon='REMOVE')
+        row.operator(LIST_OT_MolluscMoveConnectionUp.bl_idname, text='', icon='TRIA_UP')
+        row.operator(LIST_OT_MolluscMoveConnectionDown.bl_idname, text='', icon='TRIA_DOWN')
+        col.separator_spacer()
 
-        # Add new Custom Property with specific name:
-        row_l = row.row(align=True)
-        row_l.prop(context.scene, 'new_prop_name', text='')
-        row_l.operator(LIST_OT_MolluscAddConnection.bl_idname, text='', icon = 'ADD')
-        row_l.operator(LIST_OT_MolluscDeleteConnection.bl_idname, text='', icon='REMOVE')
-        row_l.operator(LIST_OT_MolluscMoveConnectionUp.bl_idname, text='', icon='TRIA_UP')
-        row_l.operator(LIST_OT_MolluscMoveConnectionDown.bl_idname, text='', icon='TRIA_DOWN')
+        # # Stepper Motor Channels:
+        # col.label(text='Stepper Motor Channels:')
+        # col.template_list("LIST_UL_MolluscConnections", "Stepper Channels", context.scene,
+        #                   "molluscmotion_stepper_channels", context.scene, "molluscmotion_stepper_channel_index")
+        # row = col.row(align=True)
+        # row.prop(context.scene, 'molluscmotion_stepper_channel_name', text='')
+        # row.operator(LIST_OT_MolluscMotionStepperChannels_Add.bl_idname, text='', icon = 'ADD')
+        # row.operator(LIST_OT_MolluscMotionStepperChannels_Delete.bl_idname, text='', icon='REMOVE')
+        # row.operator(LIST_OT_MolluscMotionStepperChannels_MoveUp.bl_idname, text='', icon='TRIA_UP')
+        # row.operator(LIST_OT_MolluscMotionStepperChannels_MoveDown.bl_idname, text='', icon='TRIA_DOWN')
+        # col.separator_spacer()
+
+        # # Dynamixel Channels:
+        # col.label(text='Dynamixel Channels:')
+        # col.template_list("LIST_UL_MolluscConnections", "Dynamixel Channels", context.scene,
+        #                   "molluscmotion_dynamixel_channels", context.scene, "molluscmotion_dynamixel_channel_index")
+        # row = col.row(align=True)
+        # row.prop(context.scene, 'molluscmotion_dynamixel_channel_name', text='')
+        # row.operator(LIST_OT_MolluscMotionDynamixelChannels_Add.bl_idname, text='', icon = 'ADD')
+        # row.operator(LIST_OT_MolluscMotionDynamixelChannels_Delete.bl_idname, text='', icon='REMOVE')
+        # row.operator(LIST_OT_MolluscMotionDynamixelChannels_MoveUp.bl_idname, text='', icon='TRIA_UP')
+        # row.operator(LIST_OT_MolluscMotionDynamixelChannels_MoveDown.bl_idname, text='', icon='TRIA_DOWN')
+        # col.separator_spacer()
+
+        # # NeoPixel Channels:
+        # col.label(text='NeoPixel Channels:')
+        # col.template_list("LIST_UL_MolluscConnections", "Neopixel Channels", context.scene,
+        #                   "molluscmotion_neopixel_channels", context.scene, "molluscmotion_neopixel_channel_index")
+        
+        # col.separator_spacer()
+        
 
         # Move Up, Move Down, Delete, Add all, Delete all:
         # row_r = row.row(align=True)
@@ -723,10 +1044,10 @@ class HARDWARE_PT_molluscmotion_connectionslist(bpy.types.Panel):
         # col.prop(context.scene.recorder, 'is_recording', text='Record when playing')
         # col.prop(context.scene.recorder, 'float_value', text='Value')
 
-class HARDWARE_PT_molluscmotion_save_to_file(bpy.types.Panel):
-    """Panel to write the animation data to a binary file"""
-    bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_SAVE_TO_FILE'
-    bl_label = 'Save to File'
+class HARDWARE_PT_molluscmotion_save_and_load_file(bpy.types.Panel):
+    """Panel to write and read the animation data to and from a binary file"""
+    bl_idname = 'HARDWARE_PT_MOLLUSC_MOTION_SAVE_AND_LOAD_FILE'
+    bl_label = 'Save and Load File'
     bl_space_type = 'GRAPH_EDITOR'
     bl_region_type = 'UI'
     bl_category = 'mollusc motion'
@@ -745,7 +1066,9 @@ class HARDWARE_PT_molluscmotion_save_to_file(bpy.types.Panel):
         filename_row.use_property_decorate = False
         filename_row.prop(context.scene.molluscmotion_save_to_disk_props, 'filename')
 
-        col.operator(FILE_OT_MolluscMotion_SaveToDisk.bl_idname)
+        col.operator(FILE_OT_MolluscMotion_SaveToFile.bl_idname)
+
+        col.operator(FILE_OT_MolluscMotion_LoadFromFile.bl_idname)
 
 class HARDWARE_PT_molluscmotion_set_state(bpy.types.Panel):
     """Panel to set the state of the mollusc motion board"""  
@@ -761,8 +1084,8 @@ class HARDWARE_PT_molluscmotion_set_state(bpy.types.Panel):
         row.operator(SERIAL_OT_MolluscMotion_SetState_Idle.bl_idname)
         row.operator(SERIAL_OT_MolluscMotion_SetState_Running.bl_idname)
         row.operator(SERIAL_OT_MolluscMotion_SetState_HomingA.bl_idname)
-        row.operator(CONTROL_OT_MolluscMotion_Modal_XInput_Start.bl_idname)
-        row.operator(CONTROL_OT_MolluscMotion_Modal_XInput_Stop.bl_idname)
+        # row.operator(CONTROL_OT_MolluscMotion_Modal_XInput_Start.bl_idname)
+        # row.operator(CONTROL_OT_MolluscMotion_Modal_XInput_Stop.bl_idname)
 
 
 #                   Blender Registration
@@ -777,23 +1100,36 @@ classes =  (HARDWARE_PT_molluscmotion_setup,
             LIST_OT_MolluscDeleteConnection,
             LIST_OT_MolluscMoveConnectionUp,
             LIST_OT_MolluscMoveConnectionDown,
+
+            # LIST_OT_MolluscMotionStepperChannels_Add,
+            # LIST_OT_MolluscMotionStepperChannels_Delete,
+            # LIST_OT_MolluscMotionStepperChannels_MoveUp,
+            # LIST_OT_MolluscMotionStepperChannels_MoveDown,
+
+            # LIST_OT_MolluscMotionDynamixelChannels_Add,
+            # LIST_OT_MolluscMotionDynamixelChannels_Delete,
+            # LIST_OT_MolluscMotionDynamixelChannels_MoveUp,
+            # LIST_OT_MolluscMotionDynamixelChannels_MoveDown,
+
+
             SerialPortHandler,
             # ControllerObject,
             # OperationMode,
             MolluscConnection,
             HARDWARE_PT_molluscmotion_connectionslist,
             LIST_UL_MolluscConnections,
-            HARDWARE_PT_molluscmotion_save_to_file,
+            HARDWARE_PT_molluscmotion_save_and_load_file,
             MolluscMotionSaveToDiskProps,
-            FILE_OT_MolluscMotion_SaveToDisk,
+            FILE_OT_MolluscMotion_SaveToFile,
+            FILE_OT_MolluscMotion_LoadFromFile,
             SERIAL_OT_MolluscMotion_SetState_Manual,
             SERIAL_OT_MolluscMotion_SetState_Idle,
             SERIAL_OT_MolluscMotion_SetState_Running,
             SERIAL_OT_MolluscMotion_SetState_HomingA,
-            CONTROL_OT_MolluscMotion_Modal_XInput_Start,
-            CONTROL_OT_MolluscMotion_Modal_XInput_Stop,
             HARDWARE_PT_molluscmotion_set_state,
-            CONTROL_OT_Modal_XInput
+            # CONTROL_OT_MolluscMotion_Modal_XInput_Start,
+            # CONTROL_OT_MolluscMotion_Modal_XInput_Stop,
+            # CONTROL_OT_Modal_XInput
             
             )
 
@@ -812,10 +1148,24 @@ def register():
     bpy.types.Scene.mollusc_object = bpy.props.PointerProperty(name = 'Mollusc Object', type = bpy.types.Object)
     # bpy.types.Scene.operation_mode = bpy.props.PointerProperty(type=OperationMode)
     bpy.types.Scene.mollusc_connections_list = bpy.props.CollectionProperty(type = MolluscConnection) 
-    bpy.types.Scene.mollusc_connections_list_index = bpy.props.IntProperty(name = 'Spaghettimonster ID', default = 0)
+    bpy.types.Scene.mollusc_connections_list_index = bpy.props.IntProperty(name = '', default = 0)
+    
+    bpy.types.Scene.molluscmotion_stepper_channels = bpy.props.CollectionProperty(type = MolluscConnection) 
+    bpy.types.Scene.molluscmotion_stepper_channel_index = bpy.props.IntProperty(name = '', default = 0)
+    bpy.types.Scene.molluscmotion_stepper_channel_name = bpy.props.StringProperty(name = 'New Stepper Channel Name', default = 'Stepper')
+    
+    bpy.types.Scene.molluscmotion_dynamixel_channels = bpy.props.CollectionProperty(type = MolluscConnection) 
+    bpy.types.Scene.molluscmotion_dynamixel_channel_index = bpy.props.IntProperty(name = '', default = 0)
+    bpy.types.Scene.molluscmotion_dynamixel_channel_name = bpy.props.StringProperty(name = 'New Dynamixel Channel Name', default = 'Dynamixel')
+
+    bpy.types.Scene.molluscmotion_neopixel_channels = bpy.props.CollectionProperty(type = MolluscConnection) 
+    bpy.types.Scene.molluscmotion_neopixel_channel_index = bpy.props.IntProperty(name = '', default = 0)
+    bpy.types.Scene.molluscmotion_neopixel_channel_name = bpy.props.StringProperty(name = 'New Neopixel Channel Name', default = 'NeoPixel')
+    
+
     bpy.types.Scene.new_prop_name = bpy.props.StringProperty(name = 'New Properties Name', default = 'prop')
-    bpy.types.Scene.record_during_playback = bpy.props.BoolProperty(name = 'Record During Playback', default = False)
     bpy.types.Scene.enable_outputs = bpy.props.BoolProperty(name = 'Enable Outputs', default = False)
+    bpy.types.Scene.record_during_playback = bpy.props.BoolProperty(name = 'Record During Playback', default = False)
     
     bpy.types.Scene.molluscmotion_save_to_disk_props = bpy.props.PointerProperty(type = MolluscMotionSaveToDiskProps) 
 
@@ -825,7 +1175,6 @@ def register():
     bpy.app.handlers.animation_playback_post.append(AnimationCurveModeHandler.animation_ended_handler)
 
     SerialPortHandler.update_serial_ports()
-
 
     AnimationCurveModeHandler.set_mollusc_controller_hw(mollusccontroller_hw)
     AnimationCurveModeHandler.set_spaghettimonster_hw(spaghettimonster_hw)
